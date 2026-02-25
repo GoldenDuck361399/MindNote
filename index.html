@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MindNote — Nhật ký học tập</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+  <!-- SheetJS (XLSX) for Excel export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{
+      --pink-1: #fff0f6;
+      --pink-2: #ffd6e8;
+      --accent: #ff6fa3;
+      --muted: #8b5b6e;
+      --card-bg: rgba(255,255,255,0.94);
+      --shadow: 0 10px 30px rgba(133,56,91,0.12);
+      font-size: 16px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      background: linear-gradient(135deg,var(--pink-1),var(--pink-2));
+      color:#3b2330;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      padding:28px;
+      overflow-y:scroll;
+    }
+
+    /* Page-cover & flip animation on first load (longer) */
+    .book-cover-wrap{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:200; perspective:1400px; background:linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.7));}
+    .book-cover{width:min(780px,88%); max-width:980px; height:460px; border-radius:18px; background:linear-gradient(180deg,#fff,#ffeef8); box-shadow:0 26px 80px rgba(0,0,0,0.12); display:flex; flex-direction:column; padding:30px; transform-origin:left center; transform:rotateY(0deg);}
+    .book-title{font-family:'Playfair Display', serif; font-size:40px; color:#5a2437}
+    .book-sub{color:var(--muted); margin-top:8px}
+    .book-cover.hide{display:none}
+    .book-cover.flip-out{animation:flipOut 1.6s cubic-bezier(.2,.9,.2,1) forwards}
+    @keyframes flipOut{0%{transform:rotateY(0) translateX(0); opacity:1}60%{transform:rotateY(-90deg) translateX(-30px); opacity:1}100%{transform:rotateY(-120deg) translateX(-120px); opacity:0}}
+
+    /* floating decorative bubbles */
+    .bubbles{position:fixed; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:0}
+    .bubble{position:absolute; border-radius:50%; opacity:0.7; transform:translate(-50%,-50%); animation:float 10s ease-in-out infinite;}
+    .b1{width:240px; height:240px; background:radial-gradient(circle at 30% 30%, rgba(255,111,163,0.18), rgba(255,111,163,0.05)); left:10%; top:18%; animation-duration:14s}
+    .b2{width:140px; height:140px; background:radial-gradient(circle at 70% 40%, rgba(255,111,163,0.12), rgba(255,111,163,0.03)); left:82%; top:8%; animation-duration:12s}
+    .b3{width:200px; height:200px; background:radial-gradient(circle at 60% 70%, rgba(255,111,163,0.14), rgba(255,111,163,0.03)); left:78%; top:72%; animation-duration:16s}
+    @keyframes float{0%{transform:translate(-50%,-48%)}50%{transform:translate(-50%,-52%)}100%{transform:translate(-50%,-48%)}}
+
+    .container{position:relative; max-width:1100px; margin:0 auto; display:grid; grid-template-columns:360px 1fr; gap:28px; align-items:start; z-index:1}
+    header{grid-column:1 / -1; display:flex; justify-content:space-between; align-items:center; gap:16px}
+    .brand{display:flex;flex-direction:column}
+    h1{font-family:'Playfair Display', serif; font-size:44px; margin:0; color:#5a2437; letter-spacing:0.4px}
+    p.lead{margin:6px 0 0; color:var(--muted); font-size:15px}
+
+    /* Sidebar */
+    .sidebar{background:var(--card-bg); padding:20px; border-radius:16px; box-shadow:var(--shadow); height:calc(100vh - 120px); overflow:auto}
+    .small-title{font-size:13px; color:var(--muted); margin-bottom:10px}
+    .mood-grid{display:flex; gap:10px; flex-wrap:wrap}
+    .mood-btn{border:2px solid transparent; background:transparent; padding:12px 14px; border-radius:12px; cursor:pointer; font-size:24px; min-width:54px; display:flex; align-items:center; justify-content:center; transition:transform .18s ease, box-shadow .18s ease}
+    .mood-btn:hover{transform:translateY(-4px)}
+    .mood-btn[aria-pressed="true"]{border-color:var(--accent); background:linear-gradient(180deg,rgba(255,255,255,0.7),rgba(255,255,255,0.3)); box-shadow:0 8px 24px rgba(255,111,163,0.12); transform:scale(1.06)}
+
+    .entries{margin-top:18px}
+    .entry-item{background:transparent; padding:12px; border-radius:12px; margin-bottom:10px; cursor:pointer; display:flex; gap:10px; align-items:flex-start; transition:transform .14s ease, background .14s ease}
+    .entry-item:hover{background:rgba(255,255,255,0.7); transform:translateY(-4px)}
+    .entry-meta{flex:1}
+    .entry-date{font-size:13px; color:var(--muted)}
+    .entry-snippet{font-weight:600; margin-top:6px; color:#5a2437}
+    .entry-actions{display:flex; gap:8px; align-items:center}
+    .icon-btn{border:0; background:transparent; cursor:pointer; padding:6px; border-radius:8px}
+    .icon-btn:hover{background:rgba(0,0,0,0.04)}
+
+    /* Editor */
+    .editor{background:var(--card-bg); padding:24px; border-radius:18px; box-shadow:var(--shadow); min-height:70vh; display:flex; flex-direction:column; gap:14px}
+    label{font-weight:700; font-size:16px}
+    .controls{display:flex; gap:12px; align-items:center}
+    textarea{width:100%; min-height:360px; resize:vertical; padding:20px; border-radius:12px; border:1px solid rgba(0,0,0,0.06); font-size:18px; line-height:1.6; font-family:Inter, system-ui; background:transparent; transition:box-shadow .12s ease}
+    textarea:focus{outline:none; box-shadow:0 6px 20px rgba(133,56,91,0.06)}
+    .actions{margin-top:8px; display:flex; gap:12px}
+    .btn{padding:12px 18px; border-radius:12px; border:0; cursor:pointer; font-weight:600; font-size:15px; box-shadow:0 6px 18px rgba(0,0,0,0.06)}
+    .btn-primary{background:var(--accent); color:white}
+    .btn-ghost{background:transparent; border:1px solid rgba(0,0,0,0.06)}
+
+    /* Music control */
+    .music-control{display:flex; gap:8px; align-items:center}
+    .music-control button{padding:8px 10px; border-radius:10px}
+
+    /* Modal */
+    .modal-backdrop{position:fixed; inset:0; background:rgba(0,0,0,0.36); display:none; align-items:center; justify-content:center; z-index:50}
+    .modal{background:white; padding:20px; border-radius:12px; width:min(720px,94%); box-shadow:0 18px 50px rgba(0,0,0,0.22); transform:translateY(20px); opacity:0; transition:all .22s ease}
+    .modal.show{transform:translateY(0); opacity:1}
+
+    .stat-row{display:flex; align-items:center; gap:12px; margin:10px 0}
+    .stat-label{width:140px; font-weight:600}
+    .stat-bar{flex:1; height:14px; background:rgba(0,0,0,0.06); border-radius:8px; overflow:hidden}
+    .stat-fill{height:100%; border-radius:8px; transform-origin:left; transition:width .5s ease}
+
+    .stat-legend{display:flex; gap:10px; flex-wrap:wrap; margin-top:8px}
+    .legend-item{display:flex; gap:6px; align-items:center; font-size:13px}
+    .legend-swatch{width:12px;height:12px;border-radius:3px}
+
+    footer{grid-column:1 / -1; margin-top:18px; display:flex; justify-content:space-between; align-items:center; color:var(--muted); font-size:13px}
+
+    /* Animations */
+    @keyframes popIn{0%{transform:scale(.96);opacity:0}100%{transform:scale(1);opacity:1}}
+    .pop{animation:popIn .24s ease}
+
+    /* Responsive */
+    @media (max-width:900px){.container{grid-template-columns:1fr;} .sidebar{height:auto}}
+  </style>
+</head>
+<body>
+  <!-- initial page cover that flips away (longer effect) -->
+  <div id="bookCoverWrap" class="book-cover-wrap" aria-hidden="true">
+    <div id="bookCover" class="book-cover">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start">
+        <div>
+          <div class="book-title">MindNote</div>
+          <div class="book-sub">Nhật ký học tập — Ghi lại cảm xúc & tiến độ học mỗi ngày</div>
+        </div>
+        <div style="text-align:right; font-size:13px; color:var(--muted)">The Sad Monkeys</div>
+      </div>
+
+      <div style="margin-top:18px; color:var(--muted); font-size:14px">Chào mừng! Hãy chọn biểu cảm, viết vài dòng, và lưu lại cảm xúc của bạn. (Trang này sẽ lật đi ngay.)</div>
+
+      <div style="margin-top:auto; display:flex; gap:8px; justify-content:flex-end">
+        <button id="skipIntro" class="btn btn-ghost">Bỏ qua</button>
+        <button id="startBtn" class="btn btn-primary">Bắt đầu</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="bubbles" aria-hidden="true">
+    <div class="bubble b1"></div>
+    <div class="bubble b2"></div>
+    <div class="bubble b3"></div>
+  </div>
+
+  <div class="container" role="application">
+    <header>
+      <div class="brand">
+        <h1 class="pop">MindNote</h1>
+        <p class="lead">Nhật ký học tập — Ghi lại cảm xúc & tiến độ học mỗi ngày</p>
+      </div>
+
+      <div style="text-align:right">
+        <div style="font-size:13px; color:var(--muted)">Dễ sử dụng • Giao diện to • Màu hồng</div>
+        <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end; align-items:center">
+          <div class="music-control">
+            <button id="musicToggle" class="btn btn-ghost" title="Bật/tắt nhạc">▶️ Nhạc</button>
+            <span id="musicStatus" style="font-size:13px; color:var(--muted)">Tắt</span>
+          </div>
+          <button id="statsBtn" class="btn btn-ghost" title="Thống kê tâm trạng">📊 Thống kê</button>
+          <button id="exportBtn" class="btn btn-ghost" title="Xóa tất cả nhật ký">🗑️ Xóa tất cả</button>
+        </div>
+      </div>
+    </header>
+
+    <aside class="sidebar" aria-label="Thanh điều khiển">
+      <div>
+        <div class="small-title">Hướng dẫn ngắn</div>
+        <div style="font-size:15px; color:#5a2437; margin-bottom:12px">Hôm nay bạn cảm thấy thế nào? Chọn biểu cảm, viết vài dòng, sau đó lưu lại. Bạn có thể xóa từng nhật ký hoặc xóa toàn bộ.</div>
+      </div>
+
+      <div style="margin-top:8px">
+        <div class="small-title">Tâm trạng (Alt+1..5)</div>
+        <div class="mood-grid" role="radiogroup" aria-label="Chọn tâm trạng">
+          <button class="mood-btn" data-mood="very_happy" aria-pressed="false" title="Rất vui">😄</button>
+          <button class="mood-btn" data-mood="happy" aria-pressed="false" title="Vui">🙂</button>
+          <button class="mood-btn" data-mood="neutral" aria-pressed="false" title="Bình thường">😐</button>
+          <button class="mood-btn" data-mood="sad" aria-pressed="false" title="Buồn">😢</button>
+          <button class="mood-btn" data-mood="tired" aria-pressed="false" title="Mệt">😴</button>
+        </div>
+      </div>
+
+      <div class="entries" aria-live="polite">
+        <div class="small-title">Nhật ký gần đây</div>
+        <div id="entriesList"></div>
+      </div>
+
+      <div style="margin-top:18px; font-size:12px; color:var(--muted)">
+        <div>Nhà phát triển: <strong>The Sad Monkeys</strong></div>
+      </div>
+    </aside>
+
+    <main class="editor" role="main">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <label for="entryText">Ghi chú hôm nay</label>
+        <div style="font-size:13px; color:var(--muted)">Đừng lo — chỉ cần viết thật</div>
+      </div>
+
+      <textarea id="entryText" placeholder="Viết cảm xúc, suy nghĩ, tiến độ học, điều muốn ghi nhớ..." aria-label="Nội dung nhật ký"></textarea>
+
+      <div class="controls">
+        <div style="display:flex; flex-direction:column">
+          <div style="font-size:13px; color:var(--muted)">Tâm trạng đang chọn:</div>
+          <div id="currentMood" style="font-size:20px">—</div>
+        </div>
+        <div style="flex:1"></div>
+        <div class="actions">
+          <button id="saveBtn" class="btn btn-primary">💾 Lưu nhật ký</button>
+          <button id="clearBtn" class="btn btn-ghost">Xóa nội dung</button>
+        </div>
+      </div>
+
+      <div style="margin-top:6px; font-size:13px; color:var(--muted)">Lưu ý: Dữ liệu được lưu cục bộ trên trình duyệt của bạn (Local Storage).</div>
+    </main>
+
+    <footer>
+      <div>© MindNote • The Sad Monkeys</div>
+      <div>Hướng dẫn: Chọn cảm xúc → Viết → Nhấn "Lưu nhật ký"</div>
+    </footer>
+  </div>
+
+  <!-- Modal: thống kê -->
+  <div id="modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal" role="document" aria-labelledby="modalTitle">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <h3 id="modalTitle">Thống kê tâm trạng</h3>
+        <button id="closeModal" class="icon-btn" aria-label="Đóng">✖️</button>
+      </div>
+
+      <div id="statsContent" style="margin-top:12px">
+        <!-- stats injected here -->
+      </div>
+
+      <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px">
+        <button id="modalExport" class="btn btn-ghost">Xuất Excel</button>
+        <button id="modalClose" class="btn btn-primary">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- background music (play/pause control) -->
+  <audio id="bgMusic" loop preload="auto" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"></audio>
+
+  <script>
+    (function(){
+      const moodButtons = document.querySelectorAll('.mood-btn');
+      const currentMoodEl = document.getElementById('currentMood');
+      const entryText = document.getElementById('entryText');
+      const saveBtn = document.getElementById('saveBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const entriesList = document.getElementById('entriesList');
+      const statsBtn = document.getElementById('statsBtn');
+      const modal = document.getElementById('modal');
+      const modalContent = document.getElementById('statsContent');
+      const closeModal = document.getElementById('closeModal');
+      const modalClose = document.getElementById('modalClose');
+      const modalExport = document.getElementById('modalExport');
+      const exportBtn = document.getElementById('exportBtn'); // clear all
+
+      const bookCoverWrap = document.getElementById('bookCoverWrap');
+      const bookCover = document.getElementById('bookCover');
+      const startBtn = document.getElementById('startBtn');
+      const skipIntro = document.getElementById('skipIntro');
+
+      const musicToggle = document.getElementById('musicToggle');
+      const musicStatus = document.getElementById('musicStatus');
+      const bgMusic = document.getElementById('bgMusic');
+
+      const MOOD_META = {
+        very_happy: {label:'Rất vui', emoji:'😄', color:'#ff9ccf'},
+        happy: {label:'Vui', emoji:'🙂', color:'#ffd1e8'},
+        neutral: {label:'Bình thường', emoji:'😐', color:'#ffeef7'},
+        sad: {label:'Buồn', emoji:'😢', color:'#c79bb0'},
+        tired: {label:'Mệt', emoji:'😴', color:'#e2b9c6'}
+      };
+
+      let selectedMood = null;
+
+      function setMood(btn){
+        moodButtons.forEach(b=> b.setAttribute('aria-pressed','false'));
+        if(btn){ btn.setAttribute('aria-pressed','true'); selectedMood = btn.dataset.mood; currentMoodEl.textContent = btn.textContent + ' ' + (btn.title || '') ; }
+        else { selectedMood = null; currentMoodEl.textContent = '—'; }
+      }
+
+      moodButtons.forEach(b=> b.addEventListener('click', ()=>{ setMood(b); b.classList.add('pop'); setTimeout(()=>b.classList.remove('pop'),260); }));
+
+      function loadEntries(){ const raw = localStorage.getItem('mindnote_entries'); let arr = []; try{ arr = raw ? JSON.parse(raw) : []; } catch(e){ arr = []; } return arr; }
+      function saveEntries(arr){ localStorage.setItem('mindnote_entries', JSON.stringify(arr)); }
+
+      function renderEntries(){
+        const arr = loadEntries(); entriesList.innerHTML = '';
+        if(arr.length===0){ entriesList.innerHTML = '<div style="color:var(--muted); font-size:14px">Chưa có nhật ký nào.</div>' ; return }
+
+        arr.slice().reverse().slice(0,50).forEach((e, idx)=>{
+          const div = document.createElement('div'); div.className='entry-item pop'; div.tabIndex = 0; div.dataset.id = e.id;
+          const meta = document.createElement('div'); meta.className='entry-meta';
+          meta.innerHTML = `<div class="entry-date">${new Date(e.date).toLocaleString()}</div><div class="entry-snippet">${escapeHTML(e.text.slice(0,120))}</div><div style="font-size:12px; color:var(--muted); margin-top:6px">Tâm trạng: ${MOOD_META[e.mood]?.emoji || '—'} ${MOOD_META[e.mood]?.label || '—'}</div>`;
+          const actions = document.createElement('div'); actions.className='entry-actions';
+          const openBtn = document.createElement('button'); openBtn.className='icon-btn'; openBtn.title='Mở nhật ký'; openBtn.innerHTML='🔎'; openBtn.addEventListener('click',(ev)=>{ ev.stopPropagation(); loadIntoEditor(e.id); });
+          const delBtn = document.createElement('button'); delBtn.className='icon-btn'; delBtn.title='Xóa nhật ký'; delBtn.innerHTML='🗑️'; delBtn.addEventListener('click',(ev)=>{ ev.stopPropagation(); deleteEntry(e.id); });
+          actions.appendChild(openBtn); actions.appendChild(delBtn);
+          div.appendChild(meta); div.appendChild(actions);
+          div.addEventListener('click', ()=>{ loadIntoEditor(e.id); window.scrollTo({top:0, behavior:'smooth'}); });
+          entriesList.appendChild(div);
+        });
+      }
+
+      function escapeHTML(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+      function loadIntoEditor(id){ const arr = loadEntries(); const e = arr.find(x=>x.id===id); if(!e) return; entryText.value = e.text; const btn = Array.from(moodButtons).find(b=>b.dataset.mood===e.mood); setMood(btn || null); }
+
+      function deleteEntry(id){ if(!confirm('Bạn có chắc muốn xóa nhật ký này?')) return; let arr = loadEntries(); arr = arr.filter(x=>x.id!==id); saveEntries(arr); renderEntries(); }
+
+      saveBtn.addEventListener('click', ()=>{
+        const text = entryText.value.trim(); if(!text){ alert('Vui lòng viết vài dòng trước khi lưu.'); entryText.focus(); return }
+        const arr = loadEntries(); const item = {id: 'id_'+Date.now(), date: new Date().toISOString(), mood: selectedMood, text}; arr.push(item); saveEntries(arr); renderEntries(); entryText.value=''; setMood(null); saveBtn.classList.add('pop'); setTimeout(()=>saveBtn.classList.remove('pop'),260);
+      });
+
+      clearBtn.addEventListener('click', ()=>{ if(confirm('Xóa nội dung đang viết?')) entryText.value=''; });
+
+      exportBtn.addEventListener('click', ()=>{ if(!confirm('Xóa toàn bộ nhật ký? Hành động này không thể hoàn tác.')) return; localStorage.removeItem('mindnote_entries'); renderEntries(); alert('Đã xóa tất cả nhật ký.'); });
+
+      // Stats modal and Excel export (with neat columns and header)
+      function computeStats(){ const arr = loadEntries(); const totals = {total: arr.length}; Object.keys(MOOD_META).forEach(k=>totals[k]=0); arr.forEach(a=>{ if(a.mood && (a.mood in totals)) totals[a.mood]++; }); return totals; }
+
+      function renderStats(){ const totals = computeStats(); const total = totals.total || 0; modalContent.innerHTML = ''; if(total===0){ modalContent.innerHTML = '<div style="color:var(--muted)">Chưa có dữ liệu để thống kê.</div>'; return }
+        Object.keys(MOOD_META).forEach(k=>{ const count = totals[k] || 0; const pct = Math.round((count/total)*100); const row = document.createElement('div'); row.className='stat-row'; const label = document.createElement('div'); label.className='stat-label'; label.textContent = `${MOOD_META[k].emoji} ${MOOD_META[k].label}`; const barWrap = document.createElement('div'); barWrap.className='stat-bar'; const fill = document.createElement('div'); fill.className='stat-fill'; fill.style.width = pct + '%'; fill.style.background = MOOD_META[k].color; barWrap.appendChild(fill); const num = document.createElement('div'); num.style.minWidth='46px'; num.style.textAlign='right'; num.textContent = `${count} (${pct}%)`; row.appendChild(label); row.appendChild(barWrap); row.appendChild(num); modalContent.appendChild(row); });
+        const summary = document.createElement('div'); summary.style.marginTop='12px'; summary.style.color='var(--muted)'; summary.textContent = `Tổng ${total} nhật ký. Thống kê theo khoảng thời gian lưu trong bộ nhớ.`; modalContent.appendChild(summary);
+      }
+
+      statsBtn.addEventListener('click', ()=>{ renderStats(); modal.style.display='flex'; modal.setAttribute('aria-hidden','false'); setTimeout(()=>{ modal.querySelector('.modal').classList.add('show'); },10); });
+      closeModal.addEventListener('click', closeStats); modalClose.addEventListener('click', closeStats);
+      function closeStats(){ modal.querySelector('.modal').classList.remove('show'); setTimeout(()=>{ modal.style.display='none'; modal.setAttribute('aria-hidden','true'); },220); }
+
+      // Export to Excel using SheetJS: columns STT, Ngày viết, Tâm trạng, Nội dung with widths
+      modalExport.addEventListener('click', ()=>{
+        const data = loadEntries();
+        if(!data || data.length===0){ alert('Không có dữ liệu để xuất.'); return; }
+        // Build rows with header
+        const rows = [];
+        rows.push(['STT','Ngày viết','Tâm trạng','Nội dung']);
+        data.forEach((item, idx)=>{
+          const moodLabel = MOOD_META[item.mood]?.emoji ? (MOOD_META[item.mood].emoji + ' ' + MOOD_META[item.mood].label) : '';
+          rows.push([idx+1, new Date(item.date).toLocaleString(), moodLabel, item.text]);
+        });
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        // Set column widths for neat layout
+        ws['!cols'] = [{wch:6},{wch:20},{wch:18},{wch:80}]; // STT, Date, Mood, Content
+        // Bold header row (best-effort; some viewers may show default)
+        const headerRange = {s:{r:0,c:0}, e:{r:0,c:3}};
+        for(let C=0; C<=3; ++C){ const cellRef = XLSX.utils.encode_cell({r:0,c:C}); if(!ws[cellRef]) continue; ws[cellRef].s = {font: {bold:true}}; }
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'MindNote'); XLSX.writeFile(wb, 'mindnote_entries.xlsx');
+      });
+
+      // Music control: try to play when user interacts (browser policies)
+      let musicPlaying = false;
+      function updateMusicUI(){ musicStatus.textContent = musicPlaying ? 'Bật' : 'Tắt'; musicToggle.textContent = musicPlaying ? '⏸️ Nhạc' : '▶️ Nhạc'; }
+      musicToggle.addEventListener('click', async ()=>{
+        try{
+          if(!musicPlaying){ await bgMusic.play(); musicPlaying = true; } else { bgMusic.pause(); musicPlaying = false; }
+        }catch(e){ console.warn('Autoplay blocked, user interaction required'); musicPlaying = false; }
+        updateMusicUI();
+      });
+
+      // Try to start music after cover is hidden (this is a user interaction if they clicked Start)
+      function tryPlayMusicAfterInteraction(){
+        if(musicPlaying) return; // already playing
+        bgMusic.play().then(()=>{ musicPlaying = true; updateMusicUI(); }).catch(()=>{ /* ignore */ });
+      }
+
+      // keyboard: Alt+1..5 select mood
+      document.addEventListener('keydown', (e)=>{ if(e.altKey && (e.key>='1' && e.key<='5')){ const idx = parseInt(e.key,10)-1; if(moodButtons[idx]) setMood(moodButtons[idx]); } });
+
+      // Intro cover behavior: longer flip and ensure music try-play
+      function hideCover(){ if(!bookCover) return; bookCover.classList.add('flip-out'); setTimeout(()=>{ bookCoverWrap.style.display='none'; bookCoverWrap.setAttribute('aria-hidden','true'); tryPlayMusicAfterInteraction(); },1600); }
+      // auto hide after slightly longer delay
+      window.addEventListener('load', ()=>{ setTimeout(()=>{ hideCover(); }, 1800); });
+      startBtn.addEventListener('click', ()=>{ hideCover(); tryPlayMusicAfterInteraction(); });
+      skipIntro.addEventListener('click', ()=>{ bookCoverWrap.style.display='none'; bookCoverWrap.setAttribute('aria-hidden','true'); });
+
+      // init
+      renderEntries(); updateMusicUI();
+
+    })();
+  </script>
+</body>
+</html>
